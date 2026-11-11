@@ -1156,10 +1156,20 @@ window.KrambuaLager = {
     const sp = S.calc?.sistePeriode;
     return { token: !!getToken(), feil: S.feil, sistePeriode: sp ? { f: sp.f, t: sp.t } : null, ordrar: (S.best.ordrar || []).map(o => o.id), varer: Object.keys(S.varer).length };
   },
-  /** periodar: [{f:'YYYY-MM-DD', t:'YYYY-MM-DD', v:{varenr: antal}}], namn: {varenr: {n, p}} */
-  async importerSal(periodar, namn = {}) {
+  /** Forslag til kassevare for eit leverandørnamn: [{v, n, score}] */
+  async foreslaa(namn, n = 3) {
+    await klar;
+    return foreslaa(namn, n).map(([sc, x]) => ({ v: x.v, n: x.n, score: Math.round(sc * 100) / 100 }));
+  },
+  /** periodar: [{f:'YYYY-MM-DD', t:'YYYY-MM-DD', v:{varenr: antal}}], namn: {varenr: {n, p}}, sjekk: {rader, sum} frå skrapinga */
+  async importerSal(periodar, namn = {}, sjekk = null) {
     await klar;
     if (!getToken()) throw new Error('Manglar token på denne eininga.');
+    if (sjekk) {
+      let rader = 0, sum = 0;
+      for (const p of periodar) for (const a of Object.values(p.v || {})) { rader++; sum += a; }
+      if (rader !== sjekk.rader || Math.abs(sum - sjekk.sum) > 0.01) throw new Error(`Kontrollsum stemmer ikkje (fekk ${rader} rader / ${sum.toFixed(3)}, venta ${sjekk.rader} / ${sjekk.sum}). Ingenting er lagra.`);
+    }
     for (let forsok = 0; forsok < 3; forsok++) {
       const sha = await lesShaar();
       const sal = (await lesRaw('sal.json')) || { periodar: [] };
