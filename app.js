@@ -12,6 +12,7 @@ const CFG = {
   cacheKey: 'krambua-varelager-cache',
   namnKey: 'krambua-varelager-namn',
   modusKey: 'krambua-varelager-modus',
+  temaKey: 'krambua-varelager-tema',
   versjon: '1.0',
 };
 
@@ -54,6 +55,8 @@ const brukar = () => ls.get(CFG.namnKey) || '';
 const IKON = {
   lukk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   sok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  sol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  maane: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
   kamera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 9v6M13 9v6M17 9v6"/></svg>',
 };
 
@@ -195,8 +198,30 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function setSync(s, tekst) {
   const el = $('#sync');
   el.dataset.s = s;
+  el.title = tekst;
   el.querySelector('span').textContent = tekst;
 }
+
+/* ---------- tema (lys / mørk) ---------- */
+function temaVal() { const t = ls.get(CFG.temaKey); return t === 'lys' || t === 'mork' ? t : 'auto'; }
+function effektivtTema() { const t = temaVal(); return t !== 'auto' ? t : (matchMedia('(prefers-color-scheme: dark)').matches ? 'mork' : 'lys'); }
+function settTema(t) {
+  if (t === 'auto') { ls.del(CFG.temaKey); delete document.documentElement.dataset.theme; }
+  else { ls.set(CFG.temaKey, t); document.documentElement.dataset.theme = t === 'lys' ? 'light' : 'dark'; }
+  oppdaterTema();
+}
+function oppdaterTema() {
+  const e = effektivtTema();
+  const b = $('#tema-knapp');
+  if (b) {
+    b.innerHTML = e === 'mork' ? IKON.sol : IKON.maane;
+    const tekst = e === 'mork' ? 'Byt til lyst tema' : 'Byt til mørkt tema';
+    b.setAttribute('aria-label', tekst); b.title = tekst;
+  }
+  const farge = getComputedStyle(document.documentElement).getPropertyValue('--papir').trim();
+  const meta = $('#tema-farge'); if (meta && farge) meta.setAttribute('content', farge);
+}
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', oppdaterTema); } catch { }
 
 /* ---------- lasting ---------- */
 async function last() {
@@ -650,6 +675,9 @@ document.addEventListener('click', async ev => {
   if (a === 'lukk-bak' && ev.target !== el) return;
   switch (a) {
     case 'lukk': case 'lukk-bak': lukkArk(); break;
+    case 'tema': settTema(effektivtTema() === 'mork' ? 'lys' : 'mork'); break;
+    case 'tema-val': settTema(el.dataset.t); render(); break;
+    case 'lukk-res': S.skann.vare = null; S.skann.ukjend = null; S.skann.tal = ''; renderResultat(); break;
     case 'last': last(); break;
     case 'vare': opneVare(el.dataset.v); break;
     case 'filter': case 'filter-ikkjetalt':
@@ -895,6 +923,7 @@ function renderResultat() {
       <label class="brytar"><input type="checkbox" data-a="kvar-eining" ${sk.kvar ? 'checked' : ''}> Skann kvar eining (+1 per skann)</label>`;
   }
   el.innerHTML = `<section class="kort resultat">
+    <button class="lukk-res" data-a="lukk-res" aria-label="Lukk">${IKON.lukk}</button>
     <div class="hovud">
       <div><h3>${esc(x.n)}</h3><div class="sub">${esc(x.v)}${sk.kode && sk.kode !== x.v ? ' · ' + esc(sk.kode) : ''} · ${esc(katNamn(x.k))}${x.p ? ' · ' + fmtKr(x.p) : ''}</div></div>
       <div class="storttal ${x.lager == null ? 'null' : ''}">${x.lager == null ? 'Ikkje talt' : fmtLager(x.lager)}<small>${x.lager == null ? '' : 'på lager'}</small></div>
@@ -942,7 +971,8 @@ async function visUkjend(kode) {
   const teikn = (namn, treff) => {
     sk.ukjend = {
       kode, html: `<section class="kort resultat">
-      <h3>Ukjend strekkode</h3>
+      <button class="lukk-res" data-a="lukk-res" aria-label="Lukk">${IKON.lukk}</button>
+      <h3 style="padding-right:40px">Ukjend strekkode</h3>
       <div class="sub">${esc(kode)}${namn ? ' · Open Food Facts: ' + esc(namn) : ''}</div>
       <p style="margin:12px 0 4px">Kva vare i kassa er dette? Vel frå lista eller søk. Koplinga vert hugsa.</p>
       <div class="sok">${IKON.sok}<input class="felt" id="ukjend-sok" placeholder="Søk på namn eller varenummer" value="${esc(namn || '')}"></div>
@@ -966,7 +996,7 @@ async function visUkjend(kode) {
 function visNamnetreff(q, treff) {
   S.skann.vare = null;
   S.skann.ukjend = {
-    kode: q, html: `<section class="kort resultat"><h3>Vel vare</h3><div class="sub">Søk: ${esc(q)}</div>
+    kode: q, html: `<section class="kort resultat"><button class="lukk-res" data-a="lukk-res" aria-label="Lukk">${IKON.lukk}</button><h3 style="padding-right:40px">Vel vare</h3><div class="sub">Søk: ${esc(q)}</div>
     <ul class="forslag">${forslagHTML(treff.map(x => [1, x]), 'vel-namn')}</ul></section>` };
   renderResultat();
   document.querySelectorAll('[data-a="vel-namn"]').forEach(b => b.addEventListener('click', () => { const v = b.dataset.v; S.skann.ukjend = null; visVareIResultat(v); if (S.skann.modus === 'sjekk') opneVare(v); }));
@@ -1080,6 +1110,13 @@ function visMeir() {
   return `${feilBoks()}
   <h1 class="side-tittel">Meir</h1>
   ${tokenKort()}
+  <section class="kort meir-kort">
+    <h2>Utsjånad</h2>
+    <p>Vel lyst eller mørkt tema. «Auto» følgjer innstillinga på telefonen. Du kan òg byte med knappen oppe til høgre.</p>
+    <div class="modus" role="group" aria-label="Tema" style="margin-top:10px">
+      ${[['auto', 'Auto'], ['lys', 'Lys'], ['mork', 'Mørk']].map(([k, t]) => `<button data-a="tema-val" data-t="${k}" aria-pressed="${temaVal() === k}">${t}</button>`).join('')}
+    </div>
+  </section>
   <section class="kort meir-kort">
     <h2>Namnet ditt</h2>
     <p>Vert lagra saman med teljingar og mottak, så de ser kven som har gjort kva.</p>
@@ -1242,6 +1279,7 @@ window.KrambuaLager = {
 
 /* ---------- start ---------- */
 S.skann.modus = ls.get(CFG.modusKey) || 'telling';
+oppdaterTema();
 rute();
 last();
 if (!getToken()) klarRes();

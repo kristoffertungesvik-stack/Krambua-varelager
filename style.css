@@ -26,6 +26,7 @@
   --r-m: 12px;
   --r-l: 20px;
   --nav-h: 68px;
+  --topp-h: 56px;
   --sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
   --tal: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
   --display: "Krambua Display", "Barlow Semi Condensed", Georgia, serif;
@@ -91,8 +92,10 @@ button { cursor: pointer; }
 }
 .topp .logo { height: 30px; width: auto; display: block; }
 .topp .tittel { font-weight: 600; font-size: 15px; color: var(--blekk-2); padding-left: 12px; border-left: 1px solid var(--linje); line-height: 1.1; }
-.sync {
-  margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+.topp-hoyre { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.tema-knapp { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--linje); background: var(--flate); display: grid; place-items: center; color: var(--blekk-2); padding: 0; }
+.tema-knapp svg { width: 20px; height: 20px; }
+.sync { display: inline-flex; align-items: center; gap: 7px;
   font-size: 13px; color: var(--blekk-2); background: var(--flate);
   border: 1px solid var(--linje); border-radius: 999px; padding: 5px 11px 5px 9px;
 }
@@ -202,13 +205,13 @@ label.etikett { display: block; font-size: 14px; font-weight: 600; color: var(--
 .fakta b { color: var(--blekk); font-family: var(--tal); font-weight: 700; font-size: 16px; }
 
 /* ---------- Vareliste ---------- */
-.verktoy { position: sticky; top: 58px; z-index: 10; background: var(--papir); padding: 4px 0 10px; }
+.verktoy { position: sticky; top: calc(var(--topp-h) + env(safe-area-inset-top)); z-index: 10; background: var(--papir); padding: 4px 0 10px; }
 .sok { position: relative; }
 .sok svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; color: var(--blekk-3); }
 .sok .felt { padding-left: 44px; }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0 2px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
-.chip { flex: none; border: 1px solid var(--linje); background: var(--flate); border-radius: 999px; padding: 7px 14px; font-size: 14px; font-weight: 600; color: var(--blekk-2); }
+.chip { flex: none; border: 1px solid var(--linje); background: var(--flate); border-radius: 999px; padding: 9px 15px; min-height: 40px; font-size: 14px; font-weight: 600; color: var(--blekk-2); }
 .chip[aria-pressed="true"] { background: var(--blekk); color: var(--papir); border-color: var(--blekk); }
 .chip small { font-weight: 500; opacity: .75; margin-left: 4px; }
 select.chip { appearance: none; -webkit-appearance: none; padding-right: 30px; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 16px) 52%, calc(100% - 11px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
@@ -290,7 +293,7 @@ select.chip { appearance: none; -webkit-appearance: none; padding-right: 30px; b
 /* ---------- Ark (modal) ---------- */
 .ark-bak { position: fixed; inset: 0; z-index: 50; background: rgba(12, 18, 22, .45); display: flex; align-items: flex-end; justify-content: center; }
 .ark {
-  width: 100%; max-width: 640px; max-height: 92vh; overflow: auto; background: var(--flate);
+  width: 100%; max-width: 640px; max-height: 92vh; max-height: 92dvh; overflow: auto; background: var(--flate);
   border-radius: var(--r-l) var(--r-l) 0 0; padding: 8px 18px calc(22px + env(safe-area-inset-bottom));
   animation: opp .22s ease-out;
 }
@@ -366,3 +369,61 @@ select.chip { appearance: none; -webkit-appearance: none; padding-right: 30px; b
 .skann-side.har-resultat .kamera-boks:not(.aktiv) .start svg,
 .skann-side.har-resultat .kamera-boks:not(.aktiv) .start span { display: none; }
 .meir-kort a, .melding a, .ingress a { color: var(--raud-d); font-weight: 600; }
+
+/* ---------- Mobil ---------- */
+button, a, .chip { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+@media (max-width: 520px) {
+  :root { --topp-h: 52px; }
+  .topp { gap: 10px; padding: calc(8px + env(safe-area-inset-top)) 12px 8px; }
+  .topp .logo { height: 24px; }
+  .topp .tittel { font-size: 14px; padding-left: 10px; }
+  .sync { padding: 0; width: 40px; height: 40px; justify-content: center; border-radius: 50%; }
+  .sync span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .sync i { width: 10px; height: 10px; }
+  main { padding: 12px 12px 16px; }
+  .side-tittel { font-size: 28px; }
+  .ingress { font-size: 15px; margin-bottom: 14px; }
+  .seksjon { margin-top: 22px; }
+  .hyllelapp { padding: 10px 8px 10px 13px; }
+  .hyllelapp b { font-size: 26px; }
+  .hyllelapp span { font-size: 13px; }
+  .oppstart { padding: 16px; }
+  .oppstart .tal { font-size: 38px; }
+  .oppstart .val .knapp { flex: 1 1 100%; }
+  .rad { padding: 11px 14px; }
+  .tal-rad { grid-template-columns: repeat(2, 1fr); }
+  .ark { padding-left: 14px; padding-right: 14px; }
+  .ark-lager .storttal { font-size: 52px; }
+  .modus button { min-height: 44px; }
+  .kamera-boks { aspect-ratio: 4 / 3; margin-top: 12px; }
+  .toast-boks { top: calc(var(--topp-h) + env(safe-area-inset-top) + 6px); }
+}
+
+/* Skanneresultat som eige panel nedst på mobil – kamera og tastatur er synlege samstundes */
+.resultat .lukk-res { display: none; }
+@media (max-width: 699px) {
+  .skann-side.har-resultat { padding-bottom: 58vh; }
+  .skann-side.har-resultat .kamera-boks.aktiv { height: 30vh; min-height: 150px; }
+  .skann-side .resultat {
+    position: fixed; left: 0; right: 0; z-index: 25; margin: 0;
+    bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+    max-height: calc(100dvh - var(--nav-h) - var(--topp-h) - 150px - env(safe-area-inset-bottom) - env(safe-area-inset-top));
+    overflow-y: auto; overscroll-behavior: contain;
+    border-radius: var(--r-l) var(--r-l) 0 0; border-bottom: 0;
+    padding: 14px 14px 34px;
+    box-shadow: 0 -12px 30px -14px rgba(0, 0, 0, .45);
+    animation: opp .18s ease-out;
+  }
+  .resultat .lukk-res { display: grid; position: absolute; right: 10px; top: 10px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--gra-bg); place-items: center; color: var(--blekk-2); }
+  .resultat .lukk-res svg { width: 16px; height: 16px; }
+  .resultat .hovud { padding-right: 40px; }
+  .resultat h3 { font-size: 17px; }
+  .resultat .storttal { font-size: 40px; }
+  .resultat .storttal.null { font-size: 16px; padding-top: 4px; }
+  .tastatur-skjerm { margin: 10px 0 8px; padding: 6px 14px; }
+  .tastatur-skjerm b { font-size: 38px; }
+  .tastatur { gap: 6px; }
+  .tastatur button { min-height: 46px; font-size: 22px; }
+  .brytar { margin-top: 8px; font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .skann-side .resultat { animation: none; } }
