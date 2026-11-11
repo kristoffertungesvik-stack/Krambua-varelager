@@ -244,7 +244,7 @@ async function last() {
     S.varer = varer?.varer || {}; IDF = null;
     S.sal = (sal?.periodar || []).sort((a, b) => a.f < b.f ? -1 : 1);
     S.best = best || { ordrar: [] };
-    S.meta = { salOppdatert: sal?.oppdatert || null, bestOppdatert: best?.oppdatert || null };
+    S.meta = { salOppdatert: sal?.oppdatert || null, bestOppdatert: best?.oppdatert || null, registerImportert: varer?.registerImportert || null };
     const l = lokal ? JSON.parse(lokal) : null;
     if (l?.dirty && l.app) { S.app = flettApp(app.data, l.app); S.dirty = true; }
     else S.app = app.data;
@@ -319,7 +319,7 @@ function rekn() {
   const varer = {};
   const alle = { ...S.varer };
   for (const [id, n] of Object.entries(app.nye || {})) if (!n.slett) alle[id] = { n: n.n, p: n.p, k: n.k || 'anna', ny: true };
-  const sums = { talde: 0, med: 0, tomt: 0, lagt: 0, ikkjetalt: 0, verdi: 0, verdiTalde: 0 };
+  const sums = { talde: 0, med: 0, tomt: 0, lagt: 0, ikkjetalt: 0, verdi: 0, verdiTalde: 0, verdiInn: 0, medKp: 0 };
   const eanTil = {};
   for (const [ean, x] of Object.entries(app.ean || {})) if (x && x.v && !x.slett) (eanTil[x.v] ||= []).push(ean);
   for (const [v, rec] of Object.entries(alle)) {
@@ -364,6 +364,7 @@ function rekn() {
         if (status === 'tomt') sums.tomt++;
         if (status === 'lagt') sums.lagt++;
         if (lager > 0 && rec.p) sums.verdi += lager * rec.p;
+        if (lager > 0 && rec.kp) { sums.verdiInn += lager * rec.kp; sums.medKp++; }
       }
     }
   }
@@ -524,6 +525,7 @@ function visOversikt() {
     </div>
     <div class="fakta">
       <span>Lagerverdi (utsalspris, talde varer): <b>${fmtKr(s.verdi)}</b></span>
+      ${s.medKp ? `<span>Til innkjøpspris eks. mva: <b>${fmtKr(s.verdiInn)}</b></span>` : ''}
       <span>Sal henta t.o.m.: <b>${sp ? fmtDato(sp.t) + ' kl. 10' : '–'}</b></span>
     </div>
   </div>
@@ -720,11 +722,23 @@ document.addEventListener('click', async ev => {
     case 'lagre-namn': ls.set(CFG.namnKey, $('#namn').value.trim()); toast('Namnet er lagra.'); break;
     case 'eksport': eksporterCSV(); break;
     case 'nullstill-rest': nullstillRest(); break;
+    case 'importer-register': {
+      if (!registerUtkast) break;
+      el.disabled = true; el.textContent = 'Importerer …';
+      try {
+        const r = await importerRegister(registerUtkast);
+        registerUtkast = null;
+        toast(`Ferdig: ${fmtTal(r.oppdatert)} varer oppdaterte, ${fmtTal(r.nye)} nye, ${fmtTal(r.eanTal)} strekkodar.`);
+        render();
+      } catch (e) { toast(e.message, { feil: true }); el.disabled = false; el.textContent = 'Prøv igjen'; }
+      break;
+    }
     case 'vis-utelatne': S.lager.utelatne = el.checked; break;
     // skann
     case 'modus': S.skann.modus = el.dataset.m; ls.set(CFG.modusKey, S.skann.modus); S.skann.tal = ''; render(); break;
     case 'kamera-start': startKamera(); break;
-    case 'kamera-stopp': stoppKamera(); render(); break;
+    case 'kamera-stopp': stoppKamera(); break;
+    case 'lykt': byttLykt(); break;
     case 'manuell-sok': { const v = $('#manuell').value.trim(); if (v) handterKode(v, true); break; }
     case 'tast': tast(el.dataset.k); break;
     case 'lagre-tal': lagreTal(); break;
@@ -763,8 +777,10 @@ function visSkann() {
   </div>
   <p class="modus-tekst">${sk.leggTilEanFor ? '<b>Legg til strekkode:</b> skann strekkoden til ' + esc(S.calc?.varer[sk.leggTilEanFor]?.n || '') : tekst}</p>
   <div class="kamera-boks ${kamera.aktiv ? 'aktiv' : ''}" id="kamera-boks">
-    <div id="kamera"></div><div class="laser"></div>
-    ${kamera.aktiv ? '<button class="stopp" data-a="kamera-stopp">Stopp kamera</button>' : `<div class="start">${IKON.kamera}<button class="knapp primar" data-a="kamera-start">Start kamera</button><span style="font-size:13px">Du kan òg bruke handskannar eller skrive inn nummeret under.</span></div>`}
+    <div id="kamera"></div>
+    <div class="sikte" aria-hidden="true"><i></i><i></i><i></i><i></i><div class="laser"></div></div>
+    <div class="kamera-knappar">${kameraKnappar()}</div>
+    ${kamera.aktiv ? '' : `<div class="start">${IKON.kamera}<button class="knapp primar" data-a="kamera-start">Start kamera</button><span style="font-size:13px">Hald telefonen 15–25 cm frå strekkoden. Handskannar eller å skrive inn nummeret under fungerer òg.</span></div>`}
   </div>
   <form class="manuell" id="manuell-form" autocomplete="off">
     <input class="felt" id="manuell" inputmode="search" placeholder="Strekkode, varenummer eller namn" aria-label="Strekkode, varenummer eller namn">
@@ -775,43 +791,147 @@ function visSkann() {
 function bindSkann() {
   $('#manuell-form')?.addEventListener('submit', e => { e.preventDefault(); });
   renderResultat();
-  if (kamera.aktiv) { /* kamera-element vart teikna på nytt */ stoppKamera(true).then(startKamera); }
+  // kamera-elementet vart teikna på nytt: flytt den same videoen inn att i staden for å starte kameraet på nytt
+  if (kamera.aktiv && kamera.video) $('#kamera')?.replaceChildren(kamera.video);
 }
 
-const kamera = { aktiv: false, inst: null, lastar: false };
+/* Eige kameraoppsett: video med object-fit: cover, og vi les berre utsnittet som faktisk er synleg i sikteramma.
+   Strekkodar vert lesne med telefonen sin innebygde BarcodeDetector (Android) eller zxing-wasm (iPhone m.fl.). */
+const kamera = { aktiv: false, lastar: false, straum: null, video: null, detektor: null, lopar: false, lykt: false, lyktPaa: false, kandidat: { kode: '', n: 0, t: 0 } };
+const FORMAT = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'];
 function lastSkript(src) {
   return new Promise((ok, feil) => {
     if (document.querySelector(`script[src="${src}"]`)) return ok();
-    const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => feil(new Error('Kunne ikkje laste skannaren.'));
+    const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => feil(new Error('Kunne ikkje laste strekkodelesaren.'));
     document.head.appendChild(s);
   });
 }
+async function hentDetektor() {
+  if (kamera.detektor) return kamera.detektor;
+  if ('BarcodeDetector' in window && !/[?&]zxing=1/.test(location.search)) {
+    try {
+      const st = await window.BarcodeDetector.getSupportedFormats();
+      if (st.includes('ean_13')) return (kamera.detektor = new window.BarcodeDetector({ formats: FORMAT.filter(f => st.includes(f)) }));
+    } catch { }
+  }
+  await lastSkript('lib/strekkode.js?v=1');
+  kamera.detektor = new window.KrambuaBarcodeDetector({ formats: FORMAT });
+  return kamera.detektor;
+}
+function kameraKnappar() {
+  if (!kamera.aktiv) return '';
+  return `${kamera.lykt ? `<button class="kamera-knapp" data-a="lykt" aria-pressed="${kamera.lyktPaa}">${kamera.lyktPaa ? 'Lykt av' : 'Lykt'}</button>` : ''}<button class="kamera-knapp" data-a="kamera-stopp">Stopp kamera</button>`;
+}
+function oppdaterKameraBoks() {
+  const boks = $('#kamera-boks'); if (!boks) return;
+  boks.classList.toggle('aktiv', kamera.aktiv);
+  const k = boks.querySelector('.kamera-knappar'); if (k) k.innerHTML = kameraKnappar();
+  const st = boks.querySelector('.start'); if (st && kamera.aktiv) st.remove();
+}
+function kameraFeil(e) {
+  const n = e?.name || '', m = String(e?.message || e);
+  if (n === 'NotAllowedError' || /denied|not allowed|permission/i.test(m)) return 'Appen fekk ikkje bruke kameraet. På iPhone: Innstillingar → Safari → Kamera → «Tillat», og last sida på nytt.';
+  if (n === 'NotFoundError') return 'Fann ikkje noko kamera på denne eininga.';
+  if (n === 'NotReadableError') return 'Kameraet er i bruk av ein annan app. Lukk den og prøv igjen.';
+  if (!navigator.mediaDevices) return 'Kameraet er ikkje tilgjengeleg her. Opne appen direkte i Safari eller Chrome (ikkje inne i ein annan app).';
+  return 'Kameraet kunne ikkje startast: ' + m;
+}
 async function startKamera() {
-  if (kamera.lastar) return;
+  if (kamera.lastar || kamera.aktiv) return;
   kamera.lastar = true;
+  const detP = hentDetektor().catch(e => e);
   try {
-    await lastSkript('lib/html5-qrcode.min.js');
-    const L = window.__Html5QrcodeLibrary__;
-    const F = L.Html5QrcodeSupportedFormats;
-    if (kamera.inst) { try { await kamera.inst.stop(); } catch { } }
-    $('#kamera').innerHTML = '';
-    kamera.inst = new L.Html5Qrcode('kamera', { verbose: false, useBarCodeDetectorIfSupported: true, formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF] });
-    await kamera.inst.start({ facingMode: 'environment' }, {
-      fps: 12, aspectRatio: 1.6,
-      qrbox: (w, h) => ({ width: Math.max(120, Math.floor(w * 0.84)), height: Math.max(60, Math.floor(Math.min(h * 0.5, w * 0.38))) }),
-    }, tekst => handterKode(tekst), () => { });
-    kamera.aktiv = true;
-    const boks = $('#kamera-boks'); boks?.classList.add('aktiv');
-    const st = boks?.querySelector('.start'); if (st) st.outerHTML = '<button class="stopp" data-a="kamera-stopp">Stopp kamera</button>';
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('mediaDevices manglar');
+    let straum;
+    try {
+      straum = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    } catch (e) {
+      if (e?.name !== 'OverconstrainedError' && e?.name !== 'TypeError') throw e;
+      straum = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } });
+    }
+    kamera.straum = straum;
+    const v = document.createElement('video');
+    v.setAttribute('playsinline', ''); v.setAttribute('muted', ''); v.muted = true; v.autoplay = true;
+    v.srcObject = straum;
+    $('#kamera')?.replaceChildren(v);
+    kamera.video = v;
+    await v.play().catch(() => { });
+    const spor = straum.getVideoTracks()[0];
+    try {
+      const cap = spor.getCapabilities ? spor.getCapabilities() : {};
+      if (cap.focusMode && cap.focusMode.includes('continuous')) await spor.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      kamera.lykt = !!cap.torch;
+    } catch { }
+    const det = await detP;
+    if (det instanceof Error) throw det;
+    kamera.aktiv = true; kamera.lyktPaa = false;
+    oppdaterKameraBoks();
+    lesLoop();
   } catch (e) {
-    kamera.aktiv = false;
-    const m = String(e?.message || e);
-    toast(/Permission|NotAllowed|denied/i.test(m) ? 'Appen fekk ikkje bruke kameraet. Gi løyve i nettlesaren og prøv igjen.' : 'Kameraet kunne ikkje startast: ' + m, { feil: true });
+    stoppKamera();
+    toast(kameraFeil(e), { feil: true });
   } finally { kamera.lastar = false; }
 }
-async function stoppKamera(stille) {
-  if (kamera.inst) { try { await kamera.inst.stop(); kamera.inst.clear(); } catch { } }
-  kamera.inst = null; kamera.aktiv = false;
+function stoppKamera() {
+  kamera.aktiv = false;
+  try { kamera.straum?.getTracks().forEach(t => t.stop()); } catch { }
+  kamera.straum = null;
+  if (kamera.video) { kamera.video.srcObject = null; kamera.video.remove(); }
+  kamera.video = null; kamera.lyktPaa = false;
+  oppdaterKameraBoks();
+  return Promise.resolve();
+}
+async function byttLykt() {
+  const spor = kamera.straum?.getVideoTracks()[0]; if (!spor) return;
+  try { await spor.applyConstraints({ advanced: [{ torch: !kamera.lyktPaa }] }); kamera.lyktPaa = !kamera.lyktPaa; oppdaterKameraBoks(); } catch { toast('Lykta kunne ikkje slåast på.', { feil: true }); }
+}
+// Kva del av videoen som er synleg i boksen (object-fit: cover), i videopikslar
+function synlegUtsnitt(v, heile) {
+  const vw = v.videoWidth, vh = v.videoHeight;
+  const r = v.getBoundingClientRect();
+  const cw = r.width || vw, ch = r.height || vh;
+  const sc = Math.max(cw / vw, ch / vh);
+  let sw = cw / sc, sh = ch / sc;
+  let sx = (vw - sw) / 2, sy = (vh - sh) / 2;
+  if (!heile) { const bh = sh * 0.62; sy += (sh - bh) / 2; sh = bh; }
+  const k = Math.min(1, 1600 / sw);
+  return { sx, sy, sw, sh, w: Math.max(1, Math.round(sw * k)), h: Math.max(1, Math.round(sh * k)) };
+}
+const lerret = document.createElement('canvas');
+const lerretCtx = lerret.getContext('2d', { willReadFrequently: true });
+async function lesLoop() {
+  if (kamera.lopar) return;
+  kamera.lopar = true;
+  let n = 0;
+  try {
+    while (kamera.aktiv) {
+      const v = kamera.video;
+      if (v && v.readyState >= 2 && v.videoWidth && document.visibilityState === 'visible') {
+        try {
+          const u = synlegUtsnitt(v, n % 3 === 2);
+          if (lerret.width !== u.w || lerret.height !== u.h) { lerret.width = u.w; lerret.height = u.h; }
+          lerretCtx.drawImage(v, u.sx, u.sy, u.sw, u.sh, 0, 0, u.w, u.h);
+          const res = await kamera.detektor.detect(lerret);
+          const treff = res.find(r => r.rawValue);
+          if (treff) godtaKode(treff.rawValue.trim(), treff.format);
+        } catch { }
+        n++;
+      }
+      await new Promise(r => setTimeout(r, 70));
+    }
+  } finally { kamera.lopar = false; }
+}
+// EAN/UPC har kontrollsiffer og vert godtekne med ein gong; andre format må lesast likt to gonger
+function godtaKode(kode, format) {
+  if (!kode) return;
+  const sikker = /^(ean_13|ean_8|upc_a|upc_e)$/.test(format || '') && /^\d{8,13}$/.test(kode);
+  const c = kamera.kandidat, now = Date.now();
+  if (!sikker) {
+    if (c.kode === kode && now - c.t < 1500) c.n++; else { c.kode = kode; c.n = 1; }
+    c.t = now;
+    if (c.n < 2) return;
+  }
+  handterKode(kode);
 }
 
 let lyd = null;
@@ -1134,6 +1254,20 @@ function visMeir() {
       <tr><td>Strekkodar kopla</td><td>${fmtTal(Object.values(S.app.ean || {}).filter(e => e.v && !e.slett).length)}</td></tr>
     </table>
   </section>
+  <section class="kort meir-kort" id="vareregister">
+    <h2>Vareregister med strekkodar frå PCKasse</h2>
+    <p>Hent inn alle varene i kassa med strekkode, så kjenner appen att varene første gong du skannar dei. Gjer dette på kasse-PC-en:</p>
+    <ol class="steg">
+      <li>PCKasse → <b>Varer</b> → <b>Vareliste</b>.</li>
+      <li>Høgreklikk i lista → <b>Velg kolonner</b>. Legg til <b>Varenummer, Varenavn, Strekkode/EAN, Utsalgspris</b> (gjerne òg <b>Innkjøpspris</b> og <b>Varegruppe</b>) → OK.</li>
+      <li>Høgreklikk igjen → <b>Skriv til fil</b> → vel semikolon som skiljeteikn og lagre fila.</li>
+      <li>Vel fila her, eller send henne til Claude.</li>
+    </ol>
+    <label class="etikett" for="vr-fil">Fil frå PCKasse (.txt, .csv eller .xlsx)</label>
+    <input class="felt" id="vr-fil" type="file" accept=".txt,.csv,.tsv,.xlsx,.xls,text/plain,text/csv">
+    <div id="vr-forhand"></div>
+    ${S.meta.registerImportert ? `<p style="font-size:14px">Sist importert: ${fmtDato(S.meta.registerImportert, true)}.</p>` : ''}
+  </section>
   <section class="kort meir-kort">
     <h2>Avslutt oppstartsteljinga</h2>
     <p>Når du har skanna alt du finn i butikken og på lageret, kan du setje dei ${fmtTal(s.ikkjetalt)} varene som framleis ikkje er talde til 0. Dei dukkar då opp som «Tomt» om dei vert selde eller bestilte igjen.</p>
@@ -1172,6 +1306,133 @@ function eksporterCSV() {
   a.download = `krambua-lager-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
 }
+
+/* ---------- Import av vareregister frå PCKasse ---------- */
+function dekodTekst(buf) {
+  const b = new Uint8Array(buf);
+  if (b[0] === 0xFF && b[1] === 0xFE) return new TextDecoder('utf-16le').decode(buf);
+  if (b[0] === 0xFE && b[1] === 0xFF) return new TextDecoder('utf-16be').decode(buf);
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^\ufeff/, ''); }
+  catch { return new TextDecoder('windows-1252').decode(buf); }
+}
+function delTekst(t) {
+  const linjer = t.split(/\r?\n/).filter(l => l.trim());
+  if (!linjer.length) return [];
+  const f = linjer[0];
+  const sk = [['\t', (f.match(/\t/g) || []).length], [';', (f.match(/;/g) || []).length], [',', (f.match(/,/g) || []).length]].sort((a, b) => b[1] - a[1])[0][0];
+  return linjer.map(l => {
+    const ut = []; let cur = '', q = false;
+    for (let i = 0; i < l.length; i++) {
+      const c = l[i];
+      if (c === '"') { if (q && l[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+      else if (c === sk && !q) { ut.push(cur); cur = ''; }
+      else cur += c;
+    }
+    ut.push(cur);
+    return ut.map(x => x.trim());
+  });
+}
+async function lesRegisterFil(fil) {
+  const buf = await fil.arrayBuffer();
+  if (/\.xlsx?$/i.test(fil.name)) {
+    await lastSkript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    const wb = window.XLSX.read(buf, { type: 'array' });
+    return window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' }).map(r => r.map(x => String(x).trim()));
+  }
+  return delTekst(dekodTekst(buf));
+}
+function finnKolonner(rader) {
+  const reg = {
+    v: /^(vare ?nr\.?|varenummer|artikkel ?nr\.?|artikkelnummer|art\.? ?nr\.?|nummer|nr\.?)$/i,
+    n: /^(vare ?navn|varenamn|navn|namn|beskrivelse|varetekst|tekst)$/i,
+    ean: /ean|strekkode|barcode|gtin/i,
+    p: /utsalg|salgspris|pris ink|pris$/i,
+    kp: /innkj|kjøpspris|kostpris|inntakspris/i,
+    g: /^varegruppe ?1?$|^varegruppe$/i,
+    st: /varestatus|^status$/i,
+  };
+  for (let r = 0; r < Math.min(rader.length, 8); r++) {
+    const h = rader[r].map(x => x.replace(/[«»"]/g, '').trim());
+    const k = {};
+    h.forEach((c, i) => {
+      for (const [nam, rx] of Object.entries(reg)) {
+        if (k[nam] != null) continue;
+        if (nam === 'p' && /innkj|kjøp|kost|eks/i.test(c)) continue;
+        if (nam === 'n' && /leverand|produsent|kunde/i.test(c)) continue;
+        if (rx.test(c)) { k[nam] = i; break; }
+      }
+    });
+    if (k.v != null && (k.n != null || k.ean != null)) return { rad: r, k, hovud: h };
+  }
+  return null;
+}
+const talFraTekst = x => { const t = String(x || '').replace(/\s|kr/gi, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'); const n = parseFloat(t); return isFinite(n) ? n : null; };
+let registerUtkast = null;
+async function forhandsvisRegister(fil) {
+  const boks = $('#vr-forhand'); if (!boks) return;
+  boks.innerHTML = '<p>Les fila …</p>';
+  try {
+    const rader = await lesRegisterFil(fil);
+    const m = finnKolonner(rader);
+    if (!m) { boks.innerHTML = '<div class="melding raud" style="margin-top:12px">Fann ikkje kolonnene for varenummer og varenamn/strekkode i fila. Sjekk at overskriftsrada er med (høgreklikk → Skriv til fil).</div>'; return; }
+    const varer = [];
+    for (const r of rader.slice(m.rad + 1)) {
+      const v = String(r[m.k.v] || '').trim(); if (!v) continue;
+      const eans = m.k.ean != null ? [...new Set(String(r[m.k.ean] || '').split(/[^0-9]+/).filter(x => x.length >= 8 && x.length <= 14))] : [];
+      varer.push({ v, n: m.k.n != null ? String(r[m.k.n] || '').trim() : '', ean: eans, p: m.k.p != null ? talFraTekst(r[m.k.p]) : null, kp: m.k.kp != null ? talFraTekst(r[m.k.kp]) : null, g: m.k.g != null ? String(r[m.k.g] || '').trim() : '', st: m.k.st != null ? String(r[m.k.st] || '').trim() : '' });
+    }
+    const medEan = varer.filter(x => x.ean.length).length;
+    const nye = varer.filter(x => !S.varer[x.v]).length;
+    registerUtkast = varer;
+    const namnK = (i) => i == null ? '–' : esc(m.hovud[i]);
+    boks.innerHTML = `<table class="tabell">
+      <tr><td>Varer i fila</td><td>${fmtTal(varer.length)}</td></tr>
+      <tr><td>Med strekkode</td><td>${fmtTal(medEan)}</td></tr>
+      <tr><td>Nye (ikkje selde siste 2 år)</td><td>${fmtTal(nye)}</td></tr>
+    </table>
+    <p style="font-size:13px">Kolonner: varenr = ${namnK(m.k.v)}, namn = ${namnK(m.k.n)}, strekkode = ${namnK(m.k.ean)}, pris = ${namnK(m.k.p)}, innkjøp = ${namnK(m.k.kp)}, gruppe = ${namnK(m.k.g)}</p>
+    ${m.k.ean == null ? '<div class="melding">Fila manglar strekkode-kolonne. Legg til «Strekkode»/«EAN» under «Velg kolonner» og lag fila på nytt.</div>' : ''}
+    <div class="val"><button class="knapp primar" data-a="importer-register" ${varer.length ? '' : 'disabled'}>Importer ${fmtTal(varer.length)} varer</button></div>`;
+  } catch (e) {
+    boks.innerHTML = `<div class="melding raud" style="margin-top:12px">Kunne ikkje lese fila: ${esc(e.message)}</div>`;
+  }
+}
+async function importerRegister(rader) {
+  if (!getToken()) throw new Error('Manglar token på denne eininga.');
+  for (let forsok = 0; forsok < 3; forsok++) {
+    const sha = await lesShaar();
+    const vf = (await lesRaw('varer.json')) || { varer: {} };
+    let nye = 0, oppdatert = 0, eanTal = 0;
+    for (const r of rader) {
+      let rec = vf.varer[r.v];
+      if (!rec) {
+        const n = r.n || r.v;
+        rec = { n };
+        const g = utelatGrunn(r.v, n) || (nyServering(n) ? 'servering' : null);
+        if (g) rec.x = g; else rec.k = gjettKategori(n);
+        vf.varer[r.v] = rec; nye++;
+      } else oppdatert++;
+      if (r.n) rec.n = r.n;
+      if (r.p != null && r.p > 0) rec.p = Math.round(r.p * 100) / 100;
+      if (r.kp != null && r.kp > 0) rec.kp = Math.round(r.kp * 100) / 100;
+      if (r.g) rec.g = r.g;
+      if (r.st) rec.st = r.st;
+      if (r.ean.length) { rec.ean = [...new Set([...(rec.ean || []), ...r.ean])]; eanTal += r.ean.length; }
+      rec.r = 1;
+    }
+    vf.oppdatert = naa(); vf.registerImportert = naa();
+    try {
+      await skrivFil('varer.json', vf, sha['varer.json'], `Vareregister frå PCKasse: ${rader.length} varer, ${nye} nye`);
+      S.varer = vf.varer; IDF = null; S.meta.registerImportert = vf.registerImportert;
+      ls.set(CFG.cacheKey, JSON.stringify({ varer: S.varer, sal: S.sal, best: S.best, meta: S.meta }));
+      S.calc = rekn();
+      return { nye, oppdatert, eanTal };
+    } catch (e) { if (!e.konflikt || forsok === 2) throw e; }
+  }
+}
+document.addEventListener('change', ev => {
+  if (ev.target?.id === 'vr-fil' && ev.target.files?.[0]) forhandsvisRegister(ev.target.files[0]);
+});
 
 /* ---------- Toast ---------- */
 function toast(tekst, opt = {}) {

@@ -9,4 +9,4 @@ Digitalt varelager for Krambua Bensin & Storkiosk: **https://kristoffertungesvik
 
 Sjølve tala ligg i det private repoet `Krambua-varelager-data`. Appen treng eit fine-grained GitHub-token med **Contents: Read and write** på det repoet (oppsett under «Meir» i appen).
 
-Strekkodeskanning: [html5-qrcode](https://github.com/mebjas/html5-qrcode) (Apache 2.0), lagt ved i `lib/`.
+Strekkodeskanning: [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) via [barcode-detector](https://github.com/Sec-ant/barcode-detector) (MIT), lagt ved i `lib/`. Android brukar den innebygde BarcodeDetector når han finst.

@@ -427,3 +427,18 @@ button, a, .chip { touch-action: manipulation; -webkit-tap-highlight-color: tran
   .brytar { margin-top: 8px; font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .skann-side .resultat { animation: none; } }
+
+/* ---------- Kamera (eige oppsett) ---------- */
+.kamera-boks #kamera video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sikte { position: absolute; left: 8%; right: 8%; top: 50%; height: 46%; transform: translateY(-50%); pointer-events: none; opacity: 0; z-index: 2; transition: opacity .2s; }
+.kamera-boks.aktiv .sikte { opacity: 1; }
+.sikte i { position: absolute; width: 24px; height: 24px; border: 0 solid #fff; }
+.sikte i:nth-child(1) { left: 0; top: 0; border-width: 3px 0 0 3px; border-top-left-radius: 8px; }
+.sikte i:nth-child(2) { right: 0; top: 0; border-width: 3px 3px 0 0; border-top-right-radius: 8px; }
+.sikte i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 3px 3px; border-bottom-left-radius: 8px; }
+.sikte i:nth-child(4) { right: 0; bottom: 0; border-width: 0 3px 3px 0; border-bottom-right-radius: 8px; }
+.sikte .laser { left: 4%; right: 4%; }
+.kamera-knappar { position: absolute; z-index: 3; right: 10px; top: 10px; display: flex; gap: 6px; }
+.kamera-knapp { background: rgba(0, 0, 0, .55); color: #fff; border: 0; border-radius: 999px; padding: 8px 13px; font-size: 13px; font-weight: 600; min-height: 36px; }
+.kamera-knapp[aria-pressed="true"] { background: #fff; color: #10171B; }
+.skann-side.har-resultat .kamera-boks.aktiv .sikte { height: 60%; }
