@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="nn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Krambua – Varelager</title>
+<meta name="description" content="Digitalt varelager for Krambua Bensin &amp; Storkiosk">
+<meta name="theme-color" content="#EA2935">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Varelager">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/KrambuaDisplay.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<header class="topp">
+  <a href="#oversikt" aria-label="Til oversikta"><img class="logo" src="img/logo.svg" alt="Krambua"></a>
+  <span class="tittel">Varelager</span>
+  <span class="sync" id="sync" data-s="av" role="status" aria-live="polite"><i></i><span>Ikkje tilkopla</span></span>
+</header>
+
+<main id="innhald">
+  <div class="lastar"><div class="k">K</div><div>Opnar varelageret …</div></div>
+</main>
+
+<nav class="nav" aria-label="Hovudmeny">
+  <a href="#oversikt" data-v="oversikt">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+    <span>Oversikt</span></a>
+  <a href="#lager" data-v="lager">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    <span>Lager</span></a>
+  <a href="#skann" data-v="skann" class="skann">
+    <span class="rund"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 9v6M13 9v6M17 9v6"/></svg></span>
+    <b>Skann</b></a>
+  <a href="#mottak" data-v="mottak">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/></svg>
+    <span>Mottak</span><em class="merke skjult" id="mottak-merke"></em></a>
+  <a href="#meir" data-v="meir">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+    <span>Meir</span></a>
+</nav>
+
+<div class="toast-boks" id="toastar" aria-live="polite"></div>
+<div id="ark-rot"></div>
+
+<script src="lib/kategoriar.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
