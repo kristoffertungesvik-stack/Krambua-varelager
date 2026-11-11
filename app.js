@@ -369,7 +369,11 @@ function rekn() {
     }
   }
   const eanKart = {};
-  for (const [v, x] of Object.entries(varer)) for (const e of x.eans) eanKart[e] = v;
+  for (const [v, x] of Object.entries(varer)) for (const e of x.eans) {
+    const f = eanKart[e] && varer[eanKart[e]];
+    // same strekkode på fleire varer: føretrekk vara som er i lageret og sel mest
+    if (!f || (x.med && !f.med) || (x.med === f.med && x.q365 > f.q365)) eanKart[e] = v;
+  }
   const sistePeriode = S.sal.length ? S.sal[S.sal.length - 1] : null;
   return { varer, sums, utanKopling, kjemInn, eanKart, sistePeriode, mot };
 }
