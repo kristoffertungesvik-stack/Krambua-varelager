@@ -244,7 +244,7 @@ async function last() {
     S.varer = varer?.varer || {}; IDF = null;
     S.sal = (sal?.periodar || []).sort((a, b) => a.f < b.f ? -1 : 1);
     S.best = best || { ordrar: [] };
-    S.meta = { salOppdatert: sal?.oppdatert || null, bestOppdatert: best?.oppdatert || null, registerImportert: varer?.registerImportert || null };
+    S.meta = { salOppdatert: sal?.oppdatert || null, bestOppdatert: best?.oppdatert || null, registerImportert: varer?.registerImportert || null, registerKjelde: varer?.registerKjelde || null };
     const l = lokal ? JSON.parse(lokal) : null;
     if (l?.dirty && l.app) { S.app = flettApp(app.data, l.app); S.dirty = true; }
     else S.app = app.data;
@@ -355,7 +355,7 @@ function rekn() {
     else if (lager <= 0) status = 'tomt';
     else if (min > 0 && lager <= min) status = 'lagt';
     const eans = [...new Set([...(rec.ean || []), ...(eanTil[v] || [])])];
-    varer[v] = { v, n: rec.n, p: rec.p, k: rec.k || 'anna', x: rec.x, ny: !!rec.ny, med, lager, selt, inn, tl, q7, q30, q90, q365, sist, min, autoMin: typeof inst.min !== 'number', status, eans };
+    varer[v] = { v, n: rec.n, p: rec.p, k: rec.k || 'anna', x: rec.x, ny: !!rec.ny, erstatta: app.innst?.[v]?.erstatta, med, lager, selt, inn, tl, q7, q30, q90, q365, sist, min, autoMin: typeof inst.min !== 'number', status, eans };
     if (med) {
       sums.med++;
       if (status === 'ikkjetalt') sums.ikkjetalt++;
@@ -425,19 +425,21 @@ function foreslaa(tekst, n = 8) {
   const c = S.calc?.varer || {};
   const ut = [];
   for (const x of Object.values(c)) {
-    if (x.x === 'generisk' || x.x === 'teneste') continue;
-    const sc = likskap(tekst, x.n);
+    if (x.x === 'generisk' || x.x === 'teneste' || x.erstatta) continue;
+    let sc = likskap(tekst, x.n);
+    if (x.med) sc *= 1.08; // litt føremon til varer som er i sal
     if (sc > 0.12) ut.push([sc, x]);
   }
   ut.sort((a, b) => b[0] - a[0] || (b[1].q365 - a[1].q365));
   return ut.slice(0, n);
 }
-function sokVarer(q) {
+function sokVarer(q, alle) {
   const c = S.calc?.varer || {};
   const toks = norm(q).split(' ').filter(Boolean);
   const res = [];
   for (const x of Object.values(c)) {
-    if (!S.lager.utelatne && !x.med) continue;
+    if (alle && (x.x === 'generisk' || x.x === 'teneste' || x.erstatta)) continue;
+    if (!alle && !S.lager.utelatne && !x.med) continue;
     if (!toks.length) { res.push(x); continue; }
     const hay = norm(x.n) + ' ' + x.v + ' ' + x.eans.join(' ');
     if (toks.every(t => hay.includes(t))) res.push(x);
@@ -604,7 +606,7 @@ function opneVare(v) {
   const inst = S.app.innst?.[v] || {};
   visArk(`
     <h2>${esc(x.n)}</h2>
-    <div class="sub">${esc(x.v)} · ${esc(katNamn(x.k))}${x.p ? ' · ' + fmtKr(x.p) : ''}${x.x && !x.med ? ' · utelaten (' + esc(x.x) + ')' : ''}</div>
+    <div class="sub">${esc(x.v)} · ${esc(katNamn(x.k))}${x.p ? ' · ' + fmtKr(x.p) : ''}${x.x && !x.med ? ' · ' + ({ gamal: 'ikkje selt sidan 2024 – vert teken med når du tel ho', servering: 'servering', generisk: 'generisk kasseknapp', teneste: 'teneste/avtale', lausvekt: 'lausvekt' }[x.x] || 'utelaten') : ''}</div>
     <div class="ark-lager">
       <div class="storttal ${x.lager == null ? 'null' : ''}">${x.lager == null ? 'Ikkje talt' : fmtLager(x.lager)}<small>${x.lager == null ? 'Skann vara og tel ho for å starte' : 'på lager no'}</small></div>
       <span class="status ${x.status}">${STATUS_TEKST[x.status]}</span>
@@ -649,13 +651,19 @@ function lukkArk() { $('#ark-rot').innerHTML = ''; S.arkOpen = null; }
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.arkOpen) lukkArk(); });
 
 /* ---------- handlingar ---------- */
+function takMed(v) {
+  const x = S.calc?.varer[v];
+  if (x && !x.med && x.x !== 'generisk' && x.x !== 'teneste') S.app.innst[v] = { ...(S.app.innst[v] || {}), med: true, t: naa() };
+}
 function nyTeljing(v, a) {
+  takMed(v);
   const e = { id: nyId(), v, a: Math.max(0, Number(a) || 0), t: naa(), av: brukar() || undefined };
   S.app.teljingar.push(e);
   endra();
   return e;
 }
 function nyttMottak(v, a, notat) {
+  takMed(v);
   const e = { id: nyId(), v, a: Number(a) || 0, t: naa(), av: brukar() || undefined, notat };
   S.app.mottak.push(e);
   endra();
@@ -744,7 +752,17 @@ document.addEventListener('click', async ev => {
     case 'lagre-tal': lagreTal(); break;
     case 'legg-til-modus': S.skann.leggTil = el.dataset.m === 'legg'; renderResultat(); break;
     case 'kvar-eining': S.skann.kvar = el.checked; break;
-    case 'kople-ean': koplaEan(S.skann.ukjend.kode, el.dataset.v); visVareIResultat(el.dataset.v, S.skann.ukjend.kode); S.skann.ukjend = null; toast('Strekkoden er kopla til vara.'); break;
+    case 'kople-ean': {
+      const kode = S.skann.ukjend.kode; let v = el.dataset.v;
+      if (v.startsWith('P:') && kode.startsWith(v.slice(2))) {
+        const r = S.calc.varer[v];
+        S.app.nye[kode] = { n: r.n, p: r.p, k: r.k, t: naa(), fra: v };
+        S.app.innst[v] = { ...(S.app.innst[v] || {}), med: false, erstatta: kode, t: naa() };
+        v = kode;
+      }
+      koplaEan(kode, v); visVareIResultat(v, kode); S.skann.ukjend = null; toast('Strekkoden er kopla til vara.');
+      break;
+    }
     case 'ny-vare': nyVareSkjema(); break;
     case 'lagre-ny-vare': lagreNyVare(); break;
     case 'angre': angre(el.dataset.type, el.dataset.id); el.closest('.toast')?.remove(); break;
@@ -976,7 +994,7 @@ function handterKode(raw, manuell) {
   let v = finnVareForKode(kode);
   if (!v && manuell && !/^\d{6,}$/.test(kode)) {
     // namnesøk
-    const treff = sokVarer(kode).sort((a, b) => b.q365 - a.q365).slice(0, 8);
+    const treff = sokVarer(kode, true).sort((a, b) => (b.med - a.med) || (b.q365 - a.q365)).slice(0, 8);
     if (treff.length === 1) v = treff[0].v;
     else { sk.ukjend = null; visNamnetreff(kode, treff); return; }
   }
@@ -1103,14 +1121,15 @@ async function visUkjend(kode) {
     const inp = $('#ukjend-sok');
     inp?.addEventListener('input', () => {
       const q = inp.value.trim();
-      const t = /^\d+$/.test(q) ? sokVarer(q).slice(0, 8).map(x => [1, x]) : foreslaa(q, 10);
+      const t = /^\d+$/.test(q) ? sokVarer(q, true).slice(0, 8).map(x => [1, x]) : foreslaa(q, 10);
       $('#ukjend-liste').innerHTML = forslagHTML(t, 'kople-ean');
     });
   };
-  teikn('', []);
+  const prefiks = Object.values(S.calc.varer).filter(x => x.v.startsWith('P:') && !x.erstatta && kode.startsWith(x.v.slice(2))).map(x => [2, x]);
+  teikn('', prefiks);
   const namn = await offNamn(kode);
   if (sk.ukjend?.kode !== kode) return;
-  teikn(namn, namn ? foreslaa(namn, 10) : []);
+  teikn(namn, [...prefiks, ...(namn ? foreslaa(namn, 10).filter(([, x]) => !prefiks.some(([, y]) => y.v === x.v)) : [])]);
   if (!namn) $('#ukjend-sok')?.focus();
 }
 function visNamnetreff(q, treff) {
@@ -1210,7 +1229,7 @@ function opneKopling(oid, i) {
   const inp = $('#kople-sok');
   inp.addEventListener('input', () => {
     const q = inp.value.trim();
-    const t = !q ? treff : /^\d+$/.test(q) ? sokVarer(q).slice(0, 10).map(x => [1, x]) : foreslaa(q, 10);
+    const t = !q ? treff : /^\d+$/.test(q) ? sokVarer(q, true).slice(0, 10).map(x => [1, x]) : foreslaa(q, 10);
     $('#kople-liste').innerHTML = forslagHTML(t, 'vel-kopling');
   });
 }
@@ -1266,7 +1285,7 @@ function visMeir() {
     <label class="etikett" for="vr-fil">Fil frå PCKasse (.txt, .csv eller .xlsx)</label>
     <input class="felt" id="vr-fil" type="file" accept=".txt,.csv,.tsv,.xlsx,.xls,text/plain,text/csv">
     <div id="vr-forhand"></div>
-    ${S.meta.registerImportert ? `<p style="font-size:14px">Sist importert: ${fmtDato(S.meta.registerImportert, true)}.</p>` : ''}
+    ${S.meta.registerImportert ? `<p style="font-size:14px">Sist importert: ${fmtDato(S.meta.registerImportert, true)}${S.meta.registerKjelde ? ' – ' + esc(S.meta.registerKjelde) : ''}. ${fmtTal(Object.values(S.varer).filter(r => r.r).length)} varer i registeret, ${fmtTal(Object.values(S.varer).filter(r => r.ean?.length).length)} med strekkode.</p>` : ''}
   </section>
   <section class="kort meir-kort">
     <h2>Avslutt oppstartsteljinga</h2>
@@ -1388,7 +1407,7 @@ async function forhandsvisRegister(fil) {
     boks.innerHTML = `<table class="tabell">
       <tr><td>Varer i fila</td><td>${fmtTal(varer.length)}</td></tr>
       <tr><td>Med strekkode</td><td>${fmtTal(medEan)}</td></tr>
-      <tr><td>Nye (ikkje selde siste 2 år)</td><td>${fmtTal(nye)}</td></tr>
+      <tr><td>Nye varer (ikkje i lista frå før)</td><td>${fmtTal(nye)}</td></tr>
     </table>
     <p style="font-size:13px">Kolonner: varenr = ${namnK(m.k.v)}, namn = ${namnK(m.k.n)}, strekkode = ${namnK(m.k.ean)}, pris = ${namnK(m.k.p)}, innkjøp = ${namnK(m.k.kp)}, gruppe = ${namnK(m.k.g)}</p>
     ${m.k.ean == null ? '<div class="melding">Fila manglar strekkode-kolonne. Legg til «Strekkode»/«EAN» under «Velg kolonner» og lag fila på nytt.</div>' : ''}
@@ -1423,7 +1442,7 @@ async function importerRegister(rader) {
     vf.oppdatert = naa(); vf.registerImportert = naa();
     try {
       await skrivFil('varer.json', vf, sha['varer.json'], `Vareregister frå PCKasse: ${rader.length} varer, ${nye} nye`);
-      S.varer = vf.varer; IDF = null; S.meta.registerImportert = vf.registerImportert;
+      S.varer = vf.varer; IDF = null; S.meta.registerImportert = vf.registerImportert; S.meta.registerKjelde = vf.registerKjelde;
       ls.set(CFG.cacheKey, JSON.stringify({ varer: S.varer, sal: S.sal, best: S.best, meta: S.meta }));
       S.calc = rekn();
       return { nye, oppdatert, eanTal };
